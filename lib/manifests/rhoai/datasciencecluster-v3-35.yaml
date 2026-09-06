@@ -1,0 +1,146 @@
+# DataScienceCluster for RHOAI 3.5
+# This configuration enables all major components for a full RHOAI 3.5 installation
+# Requires: NFD, GPU Operator, Kueue, cert-manager, RHCL v1.2+ (for MaaS), LWS (for llm-d)
+# Optional: JobSet operator (required if trainer.managementState: Managed)
+#
+# Changes from 3.4:
+#   - EvalHub now GA (SDK, CLI, MCP server, per-tenant deployment via TrustyAI Operator)
+#   - External OIDC authentication for MaaS now GA (was TP in 3.4)
+#   - Automated Red Teaming (Garak) now GA
+#   - Responses API on OGX (formerly "Llama Stack") now GA
+#   - Priority-based flow control for llm-d now GA (breaking API changes — see
+#     scripts/install-rhoai-35.sh header for details: API group + metrics prefix renamed)
+#   - MLflow fully integrated with AI Pipelines, Kubeflow Trainer, and workbenches
+#   - Kueue: scheduling visibility in workbenches overview; optional self-managed
+#     ClusterQueue/LocalQueue support (new boolean flag on the Kueue component spec —
+#     consult the 3.5 API reference for the exact field name before enabling)
+#   - KServe: OAuth proxy sidecar resources now configurable via
+#     spec.components.kserve.oauthProxy.resources (see commented example below)
+#   - KServe: canary rollout support for RawDeployment mode (deploy-time feature,
+#     no DSC field required)
+#   - Feast: SparkApplication batch engine for feature transformations (Kubeflow
+#     Spark Operator), configured at the FeatureStore CR level, not via this DSC
+#   - API version: datasciencecluster.opendatahub.io/v2 (unchanged from 3.4)
+#
+# Reference: https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5
+apiVersion: datasciencecluster.opendatahub.io/v2
+kind: DataScienceCluster
+metadata:
+  name: default-dsc
+  labels:
+    app.kubernetes.io/name: datasciencecluster
+spec:
+  components:
+    # Dashboard - OpenShift AI web interface
+    dashboard:
+      managementState: Managed
+
+    # Workbenches - Jupyter notebooks and IDEs
+    # Images default to Red Hat Python index (not PyPI); 2025.2 images retained
+    # for transition and remain selectable (marked outdated) in 3.5
+    workbenches:
+      managementState: Managed
+      workbenchNamespace: rhods-notebooks
+
+    # AI Pipelines - ML workflow automation (required for AutoML/AutoRAG)
+    # New in 3.5: MLflow tracking is embedded into AI Pipelines runs automatically
+    aipipelines:
+      managementState: Managed
+      argoWorkflowsControllers:
+        managementState: Managed
+
+    # KServe - Model serving platform (required for vLLM, llm-d)
+    kserve:
+      managementState: Managed
+      # RawDeployment with Headed config (required for Guardrails + TrustyAI)
+      defaultDeploymentMode: RawDeployment
+      rawDeploymentServiceConfig: Headed
+      # NVIDIA NIM support
+      nim:
+        managementState: Managed
+      # MaaS - Models as a Service (core GA since 3.4; external OIDC auth now GA in 3.5)
+      # GA: subscriptions, API keys, llm-d serving, external OIDC authentication
+      # TP: vLLM runtime, observability dashboard, external model egress, multi-tenancy
+      # Requires: RHCL operator, Gateway API
+      #
+      # CONFIRMED (live 3.5.0 GA cluster, applying this manifest emits):
+      #   "Warning: spec.components.kserve.modelsAsService is deprecated; use
+      #    spec.components.aigateway.modelsAsAService instead. Clear to Removed
+      #    after migration (re-enabling is blocked). The field remains respected
+      #    at least through 3.6."
+      # This field still works as-is in 3.5 (and is guaranteed through 3.6), so it
+      # is kept here deliberately rather than guessing the new aigateway.modelsAsAService
+      # schema. Revisit before 3.6 and migrate to the new field once its shape is documented.
+      modelsAsService:
+        managementState: Managed
+      # New in 3.5 (optional, uncomment to customize — defaults persist when omitted):
+      # oauthProxy:
+      #   resources:
+      #     requests:
+      #       cpu: 100m
+      #       memory: 128Mi
+      #     limits:
+      #       cpu: 200m
+      #       memory: 256Mi
+
+    # Kueue - Workload scheduling
+    # Set to Unmanaged when using Red Hat Build of Kueue Operator (standalone)
+    # 3.5 adds an optional flag to disable automatic default ClusterQueue/LocalQueue
+    # creation (self-managed queues via GitOps) — not needed here since managementState
+    # is already Unmanaged and queues are created by the standalone RHBOK operator.
+    kueue:
+      defaultClusterQueueName: default
+      defaultLocalQueueName: default
+      managementState: Unmanaged
+
+    # Ray - Distributed computing framework
+    # KubeRay operator upgraded to 1.6.x in 3.5 (existing RayCluster/RayJob workloads
+    # remain fully supported, no action required)
+    ray:
+      managementState: Managed
+
+    # Trainer - Kubeflow Trainer v2 (GA)
+    # 3.5: Training Hub RLVR/GRPO dependencies pre-installed in universal workbench
+    # and Ray runtime images (no DSC-level change)
+    # IMPORTANT: Requires JobSet operator to be installed first!
+    # Set to Removed if JobSet is not installed
+    trainer:
+      managementState: Removed
+
+    # Training Operator - Legacy distributed training (deprecated)
+    trainingoperator:
+      managementState: Removed
+
+    # Model Registry - Model versioning and tracking
+    # OCI-compliant storage layer, PostgreSQL backend, artifact signing (TP) — unchanged from 3.4
+    modelregistry:
+      managementState: Managed
+      registriesNamespace: rhoai-model-registries
+
+    # TrustyAI - Model explainability, fairness, NeMo Guardrails, and EvalHub
+    # New in 3.5: EvalHub is GA (was TP in 3.4); Automated Red Teaming (Garak) is GA;
+    # NeMo Guardrails + MCP Gateway integration available (TP)
+    trustyai:
+      managementState: Managed
+
+    # Feast Operator - Feature Store (Technology Preview)
+    # New in 3.5: SparkApplication batch engine (Kubeflow Spark Operator), bidirectional
+    # workbench <-> feature store visibility in the dashboard
+    feastoperator:
+      managementState: Managed
+
+    # OGX Operator (formerly "Llama Stack Operator") - GenAI orchestration, RAG,
+    # agentic workflows. Product/docs renamed Llama Stack -> OGX starting 3.5 EA1;
+    # the DataScienceCluster component key is unchanged (llamastackoperator) as of
+    # this writing — verify against the installed CRD/CSV if this changes in a
+    # later 3.5.x patch.
+    # New in 3.5: Responses API GA, multi-tenancy support, native config.yaml fields
+    # on the OGXServer CRD, MCP Gateway integration
+    llamastackoperator:
+      managementState: Managed
+
+    # MLflow Operator - Experiment tracking, model versioning
+    # New in 3.5: fully integrated with AI Pipelines, Kubeflow Trainer, and workbenches
+    # for centralized run tracking; trace archival to S3-compatible storage (at scale)
+    mlflowoperator:
+      managementState: Managed

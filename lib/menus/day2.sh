@@ -39,7 +39,7 @@ day2_operations_submenu() {
                 ;;
             3)
                 print_header "Router Recovery"
-                source "$_DAY2_MENU_DIR/scripts/install-rhoai-34.sh" --source-only 2>/dev/null || true
+                source "$_DAY2_MENU_DIR/scripts/install-rhoai-35.sh" --source-only 2>/dev/null || true
                 local router_status
                 router_status=$(oc get pods -n openshift-ingress \
                     -l ingresscontroller.operator.openshift.io/deployment-ingresscontroller=default \

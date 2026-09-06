@@ -27,6 +27,7 @@ help:
 	@echo -e "$(CYAN)╚════════════════════════════════════════════════════════════════╝$(NC)"
 	@echo ""
 	@echo -e "$(YELLOW)Installation:$(NC)"
+	@echo "  make setup-rhoai-35        Install RHOAI 3.5 with all prerequisites (recommended)"
 	@echo "  make setup-rhoai-34        Install RHOAI 3.4 with all prerequisites"
 	@echo "  make setup-users           Create demo users with htpasswd + groups"
 	@echo "  make setup-rhoai-33        Install RHOAI 3.3 with all prerequisites"
@@ -87,6 +88,12 @@ interactive:
 # =============================================================================
 # Installation Targets
 # =============================================================================
+
+.PHONY: setup-rhoai-35
+setup-rhoai-35:
+	@echo -e "$(GREEN)▶ Installing RHOAI 3.5...$(NC)"
+	@$(BASE)/scripts/install-rhoai-35.sh
+	@echo -e "$(GREEN)✓ RHOAI 3.5 installation complete$(NC)"
 
 .PHONY: setup-rhoai-34
 setup-rhoai-34:

@@ -1,27 +1,38 @@
 #!/bin/bash
 ################################################################################
-# RHOAI 3.4 Installation Script
-# Installs Red Hat OpenShift AI 3.4 with all prerequisites
+# RHOAI 3.5 Installation Script
+# Installs Red Hat OpenShift AI 3.5 with all prerequisites
 #
-# Key changes from 3.3:
-#   - MaaS core GA (subscriptions replace tiers, API keys, llm-d)
-#     Sub-features still TP: vLLM runtime, external OIDC, observability, external egress
-#   - NeMo Guardrails now GA
-#   - MLflow Operator officially a managed DSC component
-#   - New Tech Preview: AutoML, AutoRAG, vLLM on MaaS, EvalHub
-#   - llm-d enhancements: Prometheus metrics, simplified scheduler config
-#   - MLServer ServingRuntime now GA
-#   - OCI-compliant storage for model registry
-#   - Workbench images default to Red Hat Python index
+# Key changes from 3.4:
+#   - EvalHub now GA (SDK, CLI, MCP server, per-tenant deployment)
+#   - External OIDC authentication for MaaS now GA (was TP in 3.4)
+#   - Automated Red Teaming (Garak) now GA
+#   - Responses API on OGX (formerly Llama Stack) now GA
+#   - Priority-based flow control for llm-d now GA
+#   - DiffusionGemma (dLLM) model support
+#   - MLflow integration for AI Pipelines/Kubeflow Trainer/workbenches
+#   - Kueue scheduling visibility in workbenches + self-managed ClusterQueues/LocalQueues
+#   - GPU topology/utilization dashboard; canary rollout for KServe RawDeployment
+#   - MaaS body-based model routing (OpenAI-compatible /v1/chat/completions)
+#   - New TP: MCP gateway Operator, MCP Lifecycle Operator, MaaS multi-tenancy,
+#     AutoGluon runtime, Docling SDK/Serve GPU images, llm-d batch inference
 #
-# MaaS TLS changes (3.4):
+# Breaking changes to be aware of if upgrading from 3.4:
+#   - llm-d flow control API group: inference.networking.x-k8s.io -> llm-d.ai
+#   - llm-d metrics prefix: inference_extension_ -> llm_d_epp_
+#   - llm-d tokenizer now runs as a dedicated external service (amd64 only)
+#
+# MaaS TLS (unchanged from 3.4):
 #   - Uses OpenShift service-ca for Authorino TLS (NOT cert-manager Certificate)
 #   - Gateway requires annotations: opendatahub.io/managed, authorino-tls-bootstrap
-#   - Dashboard flags: maasAuthPolicies, observabilityDashboard (new)
+#   - Dashboard flags: observabilityDashboard, externalModels (new), toolCalling (new)
+#   - CONFIRMED (live 3.5.0 cluster): `maasAuthPolicies` is REJECTED by 3.5's
+#     OdhDashboardConfig CEL validation ("must be removed or left unchanged") —
+#     do NOT set it on a fresh 3.5 install. Not called out in public release notes.
 #   - Tenant CR auto-created in models-as-a-service namespace
 #   - MaaS CRDs: MaaSSubscription, MaaSAuthPolicy, MaaSModelRef, Tenant, ExternalModel
 #
-# Reference: https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4
+# Reference: https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5
 ################################################################################
 
 set -e
@@ -64,6 +75,8 @@ NUM_USERS=5
 ADMIN_GROUP="rhods-admins"
 USER_GROUP="rhods-users"
 USER_PASSWORD="openshift"
+ENABLE_EXTERNAL_MODELS=false
+ENABLE_TOOL_CALLING=false
 
 ################################################################################
 # Helper Functions
@@ -72,7 +85,7 @@ USER_PASSWORD="openshift"
 print_banner() {
     echo ""
     echo -e "${MAGENTA}╔════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${MAGENTA}║          RHOAI 3.4 Installation Script                         ║${NC}"
+    echo -e "${MAGENTA}║          RHOAI 3.5 Installation Script                         ║${NC}"
     echo -e "${MAGENTA}╚════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
 }
@@ -108,12 +121,14 @@ usage() {
     echo "  --no-llmd              Don't configure llm-d Gateway"
     echo "  --enable-vllm-maas     Enable vLLM runtime for MaaS (Technology Preview)"
     echo "  --enable-observability Enable MaaS observability dashboard (Technology Preview)"
+    echo "  --enable-external-models  Enable external model endpoints view (Technology Preview)"
+    echo "  --enable-tool-calling  Enable validated tool-calling config display in Model Catalog"
     echo "  --deploy-grafana      Deploy standalone Grafana with GPU/vLLM dashboards"
     echo "  --postgres-connection <url>  External PostgreSQL for MaaS (skips POC DB deployment)"
     echo "                         Format: postgresql://user:pass@host:5432/db?sslmode=require"
     echo "  --skip-maas-db         Skip MaaS PostgreSQL setup entirely"
     echo "  --skip-admin-user      Skip creating the htpasswd admin user"
-    echo "  --channel <channel>    RHOAI channel (e.g., fast-3.x, stable-3.4). If not specified, will prompt."
+    echo "  --channel <channel>    RHOAI channel (e.g., stable-3.5, stable-3.x). If not specified, will prompt."
     echo "  --domain <domain>      Cluster domain (e.g., cluster.example.com)"
     echo "  --timeout <seconds>    Wait timeout for operators (default: 600)"
     echo ""
@@ -132,9 +147,9 @@ usage() {
     echo ""
     echo "Example:"
     echo "  $0 --domain cluster.example.com"
-    echo "  $0 --channel stable-3.4"
-    echo "  $0 --channel stable-3.4 --enable-vllm-maas"
-    echo "  $0 --channel stable-3.4 --enable-observability"
+    echo "  $0 --channel stable-3.5"
+    echo "  $0 --channel stable-3.5 --enable-vllm-maas"
+    echo "  $0 --channel stable-3.5 --enable-observability"
     echo "  $0 --postgres-connection 'postgresql://maas:secret@rds.example.com:5432/maas?sslmode=require'"
     echo "  $0 --setup-users --num-users 10 --user-password 'demo123'"
 }
@@ -227,8 +242,8 @@ select_rhoai_channel() {
 
     if [ -z "$channels_raw" ]; then
         print_warning "Unable to fetch RHOAI channels from cluster"
-        print_info "Using default channel: fast-3.x"
-        RHOAI_CHANNEL="fast-3.x"
+        print_info "Using default channel: stable-3.5"
+        RHOAI_CHANNEL="stable-3.5"
         return 0
     fi
 
@@ -241,8 +256,8 @@ select_rhoai_channel() {
     done < <(echo "$channels_raw" | tr ' ' '\n' | sort -V)
 
     if [ ${#channels[@]} -eq 0 ]; then
-        print_warning "No channels found, using default: fast-3.x"
-        RHOAI_CHANNEL="fast-3.x"
+        print_warning "No channels found, using default: stable-3.5"
+        RHOAI_CHANNEL="stable-3.5"
         return 0
     fi
 
@@ -304,17 +319,24 @@ select_rhoai_channel() {
     fi
 
     echo -e "${CYAN}Channel Types:${NC}"
-    echo "  • fast-3.x   : RHOAI 3.x (latest features, GenAI, MaaS)"
-    echo "  • stable-X.Y : Specific version streams (e.g., stable-3.4)"
-    echo "  • stable     : Production-ready releases"
+    echo "  • stable-3.5 : RHOAI 3.5 GA (recommended for this script)"
+    echo "  • stable-3.x : Rolling latest 3.x stream (currently resolves to 3.5.0)"
+    echo "  • fast-3.x   : Fast-track channel (may lag behind stable-3.x — verify version before use)"
+    echo "  • stable     : Production-ready releases (2.x lineage)"
     echo ""
 
+    # Prefer stable-3.5 (this script targets 3.5 specifically). Fall back to the
+    # cluster's own defaultChannel, then to fast-3.x only as a last resort.
+    # NOTE: fast-3.x has been observed pointing to a stale/older CSV on some
+    # clusters/catalogs, so it is intentionally de-prioritized here.
     local default_idx=1
     for i in "${!channel_map[@]}"; do
-        if [ "${channel_map[$i]}" = "fast-3.x" ]; then
+        if [ "${channel_map[$i]}" = "stable-3.5" ]; then
             default_idx=$((i + 1))
             break
         elif [ "${channel_map[$i]}" = "$default_channel" ]; then
+            default_idx=$((i + 1))
+        elif [ "${channel_map[$i]}" = "fast-3.x" ] && [ "$default_idx" -eq 1 ]; then
             default_idx=$((i + 1))
         fi
     done
@@ -368,13 +390,18 @@ check_prerequisites() {
     print_info "OpenShift version: $ocp_version"
 
     if [[ "$ocp_version" < "4.19" ]]; then
-        print_error "RHOAI 3.4 requires OpenShift 4.19 or later. Current: $ocp_version"
+        print_error "RHOAI 3.5 requires OpenShift 4.19 or later. Current: $ocp_version"
         exit 1
     fi
 
     if [ "$ENABLE_LLMD" = true ] && [[ "$ocp_version" < "4.20" ]]; then
         print_warning "Distributed inference with llm-d requires OCP 4.20+. Current: $ocp_version"
         print_warning "llm-d will be installed but multi-node inference may not work correctly."
+    fi
+
+    if [[ "$ocp_version" > "4.20" ]]; then
+        print_info "Note: RHOAI 3.5 documentation lists OCP 4.19-4.20 as the validated range."
+        print_info "OCP $ocp_version is newer than that range; installation will proceed but is outside the documented support matrix."
     fi
 
     print_success "Prerequisites check passed"
@@ -924,10 +951,12 @@ restart_kuadrant_operator() {
 }
 
 install_rhcl_operator() {
-    # RHOAI 3.4 MaaS prerequisite (Govern LLM access with Models-as-a-Service, §1.2):
+    # RHOAI 3.4+ MaaS prerequisite (Govern LLM access with Models-as-a-Service, §1.2):
     #   "installed the Red Hat Connectivity Link Operator version 1.2 or later
     #    to the openshift-operators namespace and created a Kuadrant custom resource
     #    in the kuadrant-system namespace with ready status."
+    # This RHCL v1.2+ requirement is unchanged in RHOAI 3.5 — no 3.5-specific RHCL
+    # manifest is needed, so we reuse the same rhcl-operator-34.yaml subscription below.
     #
     # Note: RHCL 1.3's own docs put everything in kuadrant-system. Both patterns work
     # (AllNamespaces mode). We follow RHOAI's documented prerequisite since this is an RHOAI toolkit.
@@ -945,7 +974,7 @@ install_rhcl_operator() {
     elif oc get csv -n kuadrant-system 2>/dev/null | grep -q "rhcl-operator"; then
         print_info "RHCL Operator already installed in kuadrant-system"
     else
-        # Subscription goes to openshift-operators (per RHOAI 3.4 MaaS docs)
+        # Subscription goes to openshift-operators (per RHOAI 3.4+ MaaS docs, unchanged in 3.5)
         # openshift-operators already has a default OperatorGroup — no need to create one
         oc apply -f "$ROOT_DIR/lib/manifests/rhcl/rhcl-operator-34.yaml"
 
@@ -1025,7 +1054,7 @@ install_rhcl_operator() {
         fi
     done
 
-    # Kuadrant CR goes in kuadrant-system (per RHOAI 3.4 MaaS docs)
+    # Kuadrant CR goes in kuadrant-system (per RHOAI 3.4+ MaaS docs, unchanged in 3.5)
     oc create namespace kuadrant-system 2>/dev/null || true
 
     print_step "Creating Kuadrant instance in kuadrant-system..."
@@ -1139,9 +1168,9 @@ setup_maas_database() {
 }
 
 configure_maas_tls() {
-    # RHOAI 3.4 MaaS TLS uses OpenShift service-ca (NOT cert-manager)
-    # Reference: https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/deploy-and-manage-models-as-a-service_maas#configure-tls-for-maas_maas-deploy
-    print_step "Configuring TLS for Models-as-a-Service (3.4 service-ca method)..."
+    # RHOAI 3.4+ MaaS TLS uses OpenShift service-ca (NOT cert-manager) — unchanged in 3.5
+    # Reference: https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/govern_llm_access_with_models-as-a-service/deploy-and-manage-models-as-a-service_maas#configure-tls-for-maas_maas-deploy
+    print_step "Configuring TLS for Models-as-a-Service (3.4+ service-ca method)..."
 
     # Step 1: Annotate Authorino service for OpenShift service-ca cert generation
     print_step "Annotating Authorino service for service-ca TLS cert..."
@@ -1683,7 +1712,12 @@ install_rhoai_operator() {
 
     print_step "Creating RHOAI subscription with channel: $RHOAI_CHANNEL"
     export RHOAI_CHANNEL
-    envsubst '${RHOAI_CHANNEL}' < "$ROOT_DIR/lib/manifests/rhoai/rhoai-subscription.yaml" | oc apply -f -
+    # NOTE: rhoai-subscription.yaml also references ${INSTALL_PLAN_APPROVAL}. Export
+    # and substitute it explicitly (was previously left as a literal, unsubstituted
+    # string in the applied Subscription — confirmed live; it happened to work only
+    # because OLM falls back to Automatic-like behavior for unrecognized values).
+    export INSTALL_PLAN_APPROVAL="Automatic"
+    envsubst '${RHOAI_CHANNEL} ${INSTALL_PLAN_APPROVAL}' < "$ROOT_DIR/lib/manifests/rhoai/rhoai-subscription.yaml" | oc apply -f -
 
     wait_for_operator "rhods" "redhat-ods-operator"
 
@@ -1705,7 +1739,7 @@ create_datasciencecluster() {
         return 0
     fi
 
-    oc apply -f "$ROOT_DIR/lib/manifests/rhoai/datasciencecluster-v3-34.yaml"
+    oc apply -f "$ROOT_DIR/lib/manifests/rhoai/datasciencecluster-v3-35.yaml"
 
     print_step "Waiting for DataScienceCluster core components..."
     local elapsed=0
@@ -1753,17 +1787,28 @@ enable_dashboard_features() {
         elapsed=$((elapsed + 5))
     done
 
-    # Build dashboard config with all 3.4 MaaS flags
-    # Required flags per https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service:
+    # Build dashboard config with 3.4+ MaaS flags (maasAuthPolicies removed for 3.5 — see below)
+    # Required flags per https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/govern_llm_access_with_models-as-a-service:
     #   modelAsService: true          - core MaaS functionality
-    #   genAiStudio: true             - MaaS user-facing features in dashboard
-    #   maasAuthPolicies: true        - MaaS admin features (subscriptions, auth policies)
+    #   genAiStudio: true             - MaaS user-facing features in dashboard, incl. MaaS governance page
     #   vLLMDeploymentOnMaaS: true    - Required for "Publish as MaaS" to appear in deploy wizard
     #                                   (without it, dashboard hides the non-legacy deployment path)
     # Developer Preview flags:
     #   mcpCatalog: true              - MCP Catalog under AI Hub (requires MCP Lifecycle Operator)
     # Optional TP flags:
     #   observabilityDashboard: true  - MaaS usage monitoring dashboard (TP)
+    # New in 3.5 (applied additively below via --enable-external-models / --enable-tool-calling):
+    #   externalModels: true          - View external model endpoints in AI hub (TP)
+    #   toolCalling: true             - Validated tool-calling config on Model Catalog cards
+    #
+    # CONFIRMED BREAKING CHANGE (verified against a live RHOAI 3.5.0 GA cluster):
+    #   `maasAuthPolicies` is REJECTED by 3.5's OdhDashboardConfig CEL validation:
+    #     "DEPRECATED: spec.dashboardConfig.maasAuthPolicies must be removed or left
+    #      unchanged." Setting it on a fresh install (where it doesn't already exist)
+    #   fails the patch outright. It is intentionally omitted below for 3.5. The
+    #   Subscriptions + Authorization Policies pages it used to gate are now unified
+    #   into the "MaaS governance" page under `maasAuthPolicies`'s GA replacement —
+    #   governed by `modelAsService`/`genAiStudio` alone as of this writing.
     local patch_json='{
         "spec": {
             "dashboardConfig": {
@@ -1772,7 +1817,6 @@ enable_dashboard_features() {
                 "disableKServeMetrics": false,
                 "genAiStudio": true,
                 "modelAsService": true,
-                "maasAuthPolicies": true,
                 "vLLMDeploymentOnMaaS": true,
                 "disableLMEval": false,
                 "mcpCatalog": true
@@ -1789,7 +1833,6 @@ enable_dashboard_features() {
                     "disableKServeMetrics": false,
                     "genAiStudio": true,
                     "modelAsService": true,
-                    "maasAuthPolicies": true,
                     "disableLMEval": false,
                     "vLLMDeploymentOnMaaS": true,
                     "mcpCatalog": true
@@ -1808,7 +1851,6 @@ enable_dashboard_features() {
                     "disableKServeMetrics": false,
                     "genAiStudio": true,
                     "modelAsService": true,
-                    "maasAuthPolicies": true,
                     "observabilityDashboard": true,
                     "disableLMEval": false,
                     "mcpCatalog": true
@@ -1823,7 +1865,25 @@ enable_dashboard_features() {
         --type=merge \
         -p "$patch_json" 2>/dev/null || print_warning "Could not patch dashboard config yet"
 
-    print_success "Dashboard features enabled (including maasAuthPolicies)"
+    # New 3.5 flags are applied as separate additive merge patches so they combine
+    # cleanly with whichever patch_json variant was selected above.
+    if [ "$ENABLE_EXTERNAL_MODELS" = true ]; then
+        oc patch odhdashboardconfig odh-dashboard-config \
+            -n redhat-ods-applications \
+            --type=merge \
+            -p '{"spec":{"dashboardConfig":{"externalModels": true}}}' 2>/dev/null || true
+        print_info "Enabling external model endpoints view (Technology Preview)"
+    fi
+
+    if [ "$ENABLE_TOOL_CALLING" = true ]; then
+        oc patch odhdashboardconfig odh-dashboard-config \
+            -n redhat-ods-applications \
+            --type=merge \
+            -p '{"spec":{"dashboardConfig":{"toolCalling": true}}}' 2>/dev/null || true
+        print_info "Enabling validated tool-calling configuration display on Model Catalog"
+    fi
+
+    print_success "Dashboard features enabled (genAiStudio, modelAsService, mcpCatalog)"
 }
 
 install_mcp_lifecycle_operator() {
@@ -1915,7 +1975,7 @@ create_inference_gateway() {
     print_step "Applying gateway resource overrides (2Gi memory limit)..."
     oc apply -f "$ROOT_DIR/lib/manifests/rhcl/gateway-resources.yaml"
 
-    # MaaS Gateway - MUST have both annotations for MaaS controller to work in 3.4:
+    # MaaS Gateway - MUST have both annotations for MaaS controller to work in 3.4+ (unchanged in 3.5):
     #   opendatahub.io/managed: "false" - lets MaaS controller manage auth policies
     #   security.opendatahub.io/authorino-tls-bootstrap: "true" - enables TLS to Authorino
     print_step "Creating maas-default-gateway with MaaS annotations..."
@@ -2521,11 +2581,14 @@ setup_demo_users() {
 print_summary() {
     echo ""
     echo -e "${GREEN}╔════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║          RHOAI 3.4 Installation Complete!                      ║${NC}"
+    echo -e "${GREEN}║          RHOAI 3.5 Installation Complete!                      ║${NC}"
     echo -e "${GREEN}╚════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
 
-    # RHOAI 3.4 dashboard URL changed to rh-ai (data-science-gateway auto-redirects)
+    # Dashboard route naming: some 3.4+ docs/environments use "rh-ai" as the primary
+    # route, but on a live RHOAI 3.5.0 GA cluster tested here, only "data-science-gateway"
+    # existed (no "rh-ai" route was created). This fallback chain checks both, so it
+    # works correctly either way — the comment is kept accurate to what's been observed.
     local dashboard_url=$(oc get route -n redhat-ods-applications -o jsonpath='{.items[?(@.metadata.name=="rh-ai")].spec.host}' 2>/dev/null)
     if [ -z "$dashboard_url" ]; then
         dashboard_url=$(oc get route -n redhat-ods-applications -o jsonpath='{.items[?(@.metadata.name=="data-science-gateway")].spec.host}' 2>/dev/null)
@@ -2564,16 +2627,18 @@ print_summary() {
     fi
 
     echo ""
-    echo -e "${GREEN}What's New in 3.4:${NC}"
-    echo "  • MaaS core platform now GA (subscriptions replace tiers, API keys, llm-d)"
-    echo "    Sub-features still TP: vLLM runtime, external OIDC, observability, external model egress"
-    echo "  • MaaS uses OpenShift service-ca for TLS (NOT cert-manager)"
-    echo "  • NeMo Guardrails now Generally Available"
-    echo "  • MLflow Operator is officially a managed DSC component"
-    echo "  • AutoML and AutoRAG available as Technology Preview"
-    echo "  • llm-d: Prometheus metrics, simplified scheduler config"
-    echo "  • MLServer ServingRuntime now GA (scikit-learn, XGBoost, LightGBM, ONNX)"
-    echo "  • OCI-compliant storage for Model Registry"
+    echo -e "${GREEN}What's New in 3.5:${NC}"
+    echo "  • EvalHub now GA (SDK, CLI, MCP server, per-tenant deployment)"
+    echo "  • External OIDC authentication for MaaS now GA (was TP in 3.4)"
+    echo "  • Automated Red Teaming (Garak) now GA"
+    echo "  • Responses API on OGX (formerly Llama Stack) now GA"
+    echo "  • Priority-based flow control for llm-d now GA (breaking API changes — see script header)"
+    echo "  • MLflow integration for AI Pipelines, Kubeflow Trainer, and workbenches"
+    echo "  • Kueue scheduling visibility in workbenches; self-managed ClusterQueues/LocalQueues"
+    echo "  • Canary rollout support for KServe RawDeployment"
+    echo "  • MaaS body-based model routing (OpenAI-compatible /v1/chat/completions)"
+    echo "  • New Technology Preview: MCP gateway/lifecycle operators, MaaS multi-tenancy,"
+    echo "    AutoGluon runtime, Docling SDK/Serve GPU images, external model endpoints view"
     echo ""
 
     # Show PostgreSQL info
@@ -2587,11 +2652,12 @@ print_summary() {
         echo ""
     fi
 
-    echo -e "${YELLOW}MaaS Next Steps (new subscription model in 3.4):${NC}"
+    echo -e "${YELLOW}MaaS Next Steps (subscription model, unchanged in 3.5):${NC}"
     echo "  1. Access dashboard > Settings > verify MaaS is active"
     echo "  2. Deploy a model and publish to MaaS (creates MaaSModelRef)"
-    echo "  3. Create a MaaS Subscription (dashboard Settings > Subscriptions)"
-    echo "  4. Create a MaaS Authorization Policy (dashboard Settings > Authorization Policies)"
+    echo "  3. Create a MaaS Subscription (dashboard Settings > MaaS governance)"
+    echo "     Note: 3.5 unifies Subscriptions + Authorization Policies into one 'MaaS governance' page"
+    echo "  4. Create a MaaS Authorization Policy (dashboard Settings > MaaS governance)"
     echo "  5. Generate API keys for users (dashboard or self-service)"
     echo "  6. Verify: oc get tenant default-tenant -n models-as-a-service"
     echo "  7. Verify: oc get maassubscriptions -n models-as-a-service"
@@ -2600,6 +2666,12 @@ print_summary() {
     fi
     if [ "$ENABLE_OBSERVABILITY" = true ]; then
         echo "  • MaaS observability dashboard is enabled (TP)"
+    fi
+    if [ "$ENABLE_EXTERNAL_MODELS" = true ]; then
+        echo "  • External model endpoints view is enabled (TP) - AI hub > Models > External models tab"
+    fi
+    if [ "$ENABLE_TOOL_CALLING" = true ]; then
+        echo "  • Validated tool-calling config display is enabled on Model Catalog cards"
     fi
     echo ""
 
@@ -2647,6 +2719,14 @@ main() {
                 ;;
             --enable-observability)
                 ENABLE_OBSERVABILITY=true
+                shift
+                ;;
+            --enable-external-models)
+                ENABLE_EXTERNAL_MODELS=true
+                shift
+                ;;
+            --enable-tool-calling)
+                ENABLE_TOOL_CALLING=true
                 shift
                 ;;
             --deploy-grafana)
@@ -2781,7 +2861,7 @@ main() {
     create_hardware_profile
     create_mlflow_server
 
-    # MaaS DB + TLS setup (3.4) - must run after RHCL and gateway are created
+    # MaaS DB + TLS setup (3.4+, unchanged in 3.5) - must run after RHCL and gateway are created
     # DB secret must exist BEFORE modelsAsService becomes Managed (or restart maas-api after)
     if [ "$SKIP_RHCL" = false ] && [ "$SKIP_MAAS" = false ]; then
         if [ "$SKIP_MAAS_DB" = false ]; then
