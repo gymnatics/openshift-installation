@@ -80,7 +80,15 @@ install_rhoai_menu() {
     echo ""
 
     case "$selected_channel" in
-        *3.4*|fast-3.x)
+        *3.5*|fast-3.x|stable-3.x)
+            echo -e "${CYAN}Launching RHOAI 3.5 installer (channel: $selected_channel)...${NC}"
+            echo ""
+            read -p "Proceed? (Y/n): " confirm
+            if [[ ! "$confirm" =~ ^[Nn]$ ]]; then
+                "$SCRIPT_DIR/scripts/install-rhoai-35.sh" --channel "$selected_channel"
+            fi
+            ;;
+        *3.4*)
             echo -e "${CYAN}Launching RHOAI 3.4 installer (channel: $selected_channel)...${NC}"
             echo ""
             read -p "Proceed? (Y/n): " confirm

@@ -1,6 +1,6 @@
 #!/bin/bash
 ################################################################################
-# workshop-setup.sh — Workshop environment setup (RHOAI 3.4 + OpenWebUI)
+# workshop-setup.sh — Workshop environment setup (RHOAI 3.5 + OpenWebUI)
 ################################################################################
 # Provides:
 #   setup_workshop_users            — Create htpasswd users, OAuth, RBAC
@@ -782,10 +782,10 @@ run_complete_workshop_setup() {
     local gpu_count="${3:-64}"
     local worker_count="${4:-12}"
 
-    print_header "Complete Workshop Setup (RHOAI 3.4 + OpenWebUI)"
+    print_header "Complete Workshop Setup (RHOAI 3.5 + OpenWebUI)"
 
     echo -e "${YELLOW}This will set up a complete workshop environment:${NC}"
-    echo "  • RHOAI 3.4 installation"
+    echo "  • RHOAI 3.5 installation"
     echo "  • Web Terminal operator (in-browser terminal for participants)"
     echo "  • Disable vLLM on MaaS tech preview"
     echo "  • GPU hardware profile"
@@ -805,8 +805,8 @@ run_complete_workshop_setup() {
         return 0
     fi
 
-    print_header "Step 1/9: Installing RHOAI 3.4"
-    "$ROOT_DIR/scripts/install-rhoai-34.sh" --skip-admin-user --setup-users --num-users "$user_count"
+    print_header "Step 1/9: Installing RHOAI 3.5"
+    "$ROOT_DIR/scripts/install-rhoai-35.sh" --skip-admin-user --setup-users --num-users "$user_count"
 
     print_header "Step 2/10: Installing Web Terminal"
     install_web_terminal

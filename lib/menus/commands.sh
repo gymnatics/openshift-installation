@@ -12,6 +12,7 @@ show_commands_help() {
     echo -e "${CYAN}Available commands:${NC}"
     echo ""
     echo -e "${MAGENTA}Installation:${NC}"
+    echo "  install rhoai-35              Full RHOAI 3.5 install (recommended)"
     echo "  install rhoai-34              Full RHOAI 3.4 install"
     echo "  install rhoai-33              Full RHOAI 3.3 install"
     echo "  install minimal               Minimal RHOAI (choose operators)"
@@ -62,7 +63,7 @@ show_commands_help() {
     echo ""
     echo -e "${CYAN}Examples:${NC}"
     echo "  ./rhoai-toolkit.sh deploy demo webui"
-    echo "  ./rhoai-toolkit.sh install rhoai-34 --skip-prerequisites"
+    echo "  ./rhoai-toolkit.sh install rhoai-35 --skip-prerequisites"
     echo "  ./rhoai-toolkit.sh setup maas"
     echo ""
 }
@@ -83,6 +84,9 @@ route_command() {
             ;;
         install)
             case "$subcmd" in
+                rhoai-35|rhoai35|35)
+                    exec "$_COMMANDS_DIR/scripts/install-rhoai-35.sh" "$@"
+                    ;;
                 rhoai-34|rhoai34|34)
                     exec "$_COMMANDS_DIR/scripts/install-rhoai-34.sh" "$@"
                     ;;
@@ -94,7 +98,7 @@ route_command() {
                     ;;
                 *)
                     print_error "Unknown install target: $subcmd"
-                    echo "Available: rhoai-34, rhoai-33, minimal"
+                    echo "Available: rhoai-35, rhoai-34, rhoai-33, minimal"
                     return 1
                     ;;
             esac

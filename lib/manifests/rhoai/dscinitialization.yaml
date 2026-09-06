@@ -1,6 +1,7 @@
-# DSCInitialization for RHOAI 3.4
+# DSCInitialization for RHOAI 3.4+ (shared by install-rhoai-34.sh and install-rhoai-35.sh)
 # Controls applications namespace, monitoring, and trusted CA bundle.
 # Applied before DataScienceCluster to ensure operator reconciles correctly.
+# No RHOAI 3.5-specific changes identified for this resource as of this writing.
 ---
 apiVersion: dscinitialization.opendatahub.io/v1
 kind: DSCInitialization

@@ -2,12 +2,12 @@
 
 A comprehensive toolkit for installing and configuring **OpenShift** with **Red Hat OpenShift AI (RHOAI) 3.x** on AWS, including GPU support, Model as a Service (MaaS), and GenAI capabilities.
 
-> **Latest:** RHOAI 3.4 is now supported. See [What's New in RHOAI 3.4](docs/guides/rhoai-3.4/RHOAI-34-WHATS-NEW.md) for details.
-> MaaS core platform and NeMo Guardrails are now GA. AutoML, AutoRAG, and several MaaS sub-features (vLLM runtime, OIDC, observability, external egress) remain Technology Preview.
+> **Latest:** RHOAI 3.5 is now supported. See [What's New in RHOAI 3.5](docs/guides/rhoai-3.5/RHOAI-35-WHATS-NEW.md) for details.
+> EvalHub, external OIDC auth for MaaS, Automated Red Teaming, and llm-d priority-based flow control are now GA.
+> MCP gateway/lifecycle operators, MaaS multi-tenancy, and AutoGluon runtime are new Technology Preview features.
 
-> **Known Issue:** When installing via the toolkit menu, select **`stable-3.4`** (not `stable-3.x`) as your channel.
-> The `stable-3.x` rolling channel currently falls through to a bare-bones operator-only installer instead of the full installation flow.
-> A fix is in progress on the [`refactor/rhoai-install`](https://github.com/gymnatics/RHOAI-Toolkit/tree/refactor/rhoai-install) branch.
+> **Resolved:** The toolkit menu now correctly routes both **`stable-3.5`** and the rolling **`stable-3.x`** channel
+> (which currently resolves to RHOAI 3.5.0 GA) to the full `install-rhoai-35.sh` installation flow.
 
 ## Quick Start
 
@@ -58,7 +58,8 @@ This single command provides an interactive menu to:
 ```
 ├── rhoai-toolkit.sh              # Main interactive menu (sources lib/)
 ├── scripts/                      # 50+ utility scripts
-│   ├── install-rhoai-34.sh       # RHOAI 3.4 full installation (recommended)
+│   ├── install-rhoai-35.sh       # RHOAI 3.5 full installation (recommended)
+│   ├── install-rhoai-34.sh       # RHOAI 3.4 full installation
 │   ├── install-rhoai-33.sh       # RHOAI 3.3 full installation
 │   ├── install-rhoai-minimal.sh  # Minimal RHOAI install
 │   ├── create-gpu-machineset.sh  # GPU node creation (AWS)
@@ -95,42 +96,45 @@ This single command provides an interactive menu to:
 
 ## Usage
 
-### Install RHOAI 3.4 (Recommended)
+### Install RHOAI 3.5 (Recommended)
 
 ```bash
 # Direct script — full automated install
-./scripts/install-rhoai-34.sh
+./scripts/install-rhoai-35.sh
 
 # Or interactive menu — select option 1
 ./rhoai-toolkit.sh
 
 # Makefile one-liner
-make setup-rhoai-34
+make setup-rhoai-35
 ```
 
 The interactive menu puts the most common options first:
-1. **Install RHOAI 3.4** — Recommended for most users
-2. **Workshop Demo Setup** — RHOAI 3.4 + OpenWebUI for hands-on workshops
+1. **Install RHOAI 3.5** — Recommended for most users
+2. **Workshop Demo Setup** — RHOAI 3.5 + OpenWebUI for hands-on workshops
 3. **Complete Setup** — Full OpenShift + RHOAI + GPU + MaaS from scratch
 4. **Minimal Setup** — Choose which operators to install
 
-### Common Script Flags (3.4)
+### Common Script Flags (3.5)
 
 ```bash
 # With specific RHOAI channel
-./scripts/install-rhoai-34.sh --channel stable-3.4
+./scripts/install-rhoai-35.sh --channel stable-3.5
 
 # With external PostgreSQL for MaaS (production)
-./scripts/install-rhoai-34.sh --postgres-connection 'postgresql://user:pass@host:5432/db?sslmode=require'
+./scripts/install-rhoai-35.sh --postgres-connection 'postgresql://user:pass@host:5432/db?sslmode=require'
 
 # Skip if prerequisites already installed
-./scripts/install-rhoai-34.sh --skip-prerequisites --skip-node-scaling
+./scripts/install-rhoai-35.sh --skip-prerequisites --skip-node-scaling
 
 # Enable TP features
-./scripts/install-rhoai-34.sh --enable-vllm-maas --enable-observability
+./scripts/install-rhoai-35.sh --enable-vllm-maas --enable-observability
+
+# Enable new 3.5 dashboard features
+./scripts/install-rhoai-35.sh --enable-external-models --enable-tool-calling
 
 # Deploy standalone Grafana with GPU/vLLM dashboards
-./scripts/install-rhoai-34.sh --deploy-grafana
+./scripts/install-rhoai-35.sh --deploy-grafana
 
 # Set up TLS certificates (standalone)
 ./scripts/setup-letsencrypt-tls.sh
@@ -175,12 +179,13 @@ The interactive menu puts the most common options first:
 
 ```bash
 # Full installation (recommended)
-./scripts/install-rhoai-34.sh --channel stable-3.4
+./scripts/install-rhoai-35.sh --channel stable-3.5
 
 # Or interactive menu
 ./rhoai-toolkit.sh
 
-# Previous version
+# Previous versions
+./scripts/install-rhoai-34.sh
 ./scripts/install-rhoai-33.sh
 
 # Add GPU nodes
@@ -242,14 +247,14 @@ oc logs -n kuadrant-system -l control-plane=controller-manager --tail=50
 
 ### Key Guides
 
-- [RHOAI 3.4 Installation](docs/guides/rhoai-3.4/RHOAI-34-INSTALLATION.md) (recommended)
-- [What's New in RHOAI 3.4](docs/guides/rhoai-3.4/RHOAI-34-WHATS-NEW.md)
-- [Manual Installation Guide](docs/guides/rhoai-3.4/RHOAI-34-MANUAL-INSTALLATION-GUIDE.md)
+- [RHOAI 3.5 Installation](docs/guides/rhoai-3.5/RHOAI-35-INSTALLATION.md) (recommended)
+- [What's New in RHOAI 3.5](docs/guides/rhoai-3.5/RHOAI-35-WHATS-NEW.md)
 - [OpenShift Observe Dashboards](docs/guides/OPENSHIFT-OBSERVE-DASHBOARDS.md)
 - [Hardware Profile Setup](docs/guides/HARDWARE-PROFILE-SETUP.md)
 - [GPU ResourceFlavor Configuration](docs/reference/GPU-RESOURCEFLAVOR-CONFIGURATION.md)
 - [Tool Calling](docs/guides/TOOL-CALLING-GUIDE.md)
 - [llm-d Setup](docs/guides/LLMD-SETUP-GUIDE.md)
+- [RHOAI 3.4 Installation](docs/guides/rhoai-3.4/RHOAI-34-INSTALLATION.md) (archived)
 - [RHOAI 3.3 Installation](docs/guides/rhoai-3.3/RHOAI-33-INSTALLATION.md) (archived)
 
 ---
@@ -276,8 +281,8 @@ oc logs -n kuadrant-system -l control-plane=controller-manager --tail=50
 
 ## External Resources
 
-- [RHOAI 3.4 Documentation](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4)
-- [RHOAI 3.4 MaaS Guide](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service)
+- [RHOAI 3.5 Documentation](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5)
+- [RHOAI 3.5 MaaS Guide](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/govern_llm_access_with_models-as-a-service)
 - [RHCL 1.3 Install Guide](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.3/html-single/installing_on_openshift_container_platform/index)
 - [RHOAI Supported Configurations](https://access.redhat.com/articles/rhoai-supported-configs)
 - [OpenShift Documentation](https://docs.openshift.com)

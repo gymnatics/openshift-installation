@@ -356,15 +356,15 @@ echo ""
 
 if [ "$SKIP_CORE" = false ]; then
     print_step "Step 1: Core Platform"
-    if [ -f "$ROOT_DIR/scripts/install-rhoai-34.sh" ]; then
-        print_info "Run scripts/install-rhoai-34.sh separately for full RHOAI setup"
+    if [ -f "$ROOT_DIR/scripts/install-rhoai-35.sh" ]; then
+        print_info "Run scripts/install-rhoai-35.sh separately for full RHOAI setup"
         print_info "Or use --skip-core if RHOAI is already installed"
         read -rp "Skip core setup and deploy demos only? (Y/n): " skip_confirm
         skip_confirm="${skip_confirm:-Y}"
         if [[ "$skip_confirm" =~ ^[Yy]$ ]]; then
             SKIP_CORE=true
         else
-            bash "$ROOT_DIR/scripts/install-rhoai-34.sh"
+            bash "$ROOT_DIR/scripts/install-rhoai-35.sh"
         fi
     fi
 fi

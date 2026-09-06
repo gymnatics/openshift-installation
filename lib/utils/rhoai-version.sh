@@ -52,14 +52,32 @@ detect_rhoai_version() {
             # LLMInferenceService CRD exists - this is 3.x
             local dsc_spec=$(oc get datasciencecluster default-dsc -o json 2>/dev/null)
             if echo "$dsc_spec" | grep -q "modelsAsService" 2>/dev/null; then
-                # Check for 3.4-specific indicators:
-                # 1. MaaS subscription CRDs (only in 3.4+)
-                # 2. Channel contains "3.4"
+                # Check for 3.4+/3.5+ indicators:
+                # 1. MaaS subscription CRDs (only in 3.4+) — disambiguate 3.4 vs 3.5 via channel
+                # 2. Channel contains "3.4" or "3.5"
                 # 3. Tenant CRD exists
                 if oc get crd maassubscriptions.maas.opendatahub.io &>/dev/null 2>&1; then
-                    RHOAI_VERSION="3.4.x"
-                    RHOAI_MAJOR_VERSION="3"
-                    RHOAI_MINOR_VERSION="4"
+                    local channel=$(oc get subscription rhods-operator -n redhat-ods-operator -o jsonpath='{.spec.channel}' 2>/dev/null)
+                    if echo "$channel" | grep -qE "3\.5" 2>/dev/null; then
+                        RHOAI_VERSION="3.5.x"
+                        RHOAI_MAJOR_VERSION="3"
+                        RHOAI_MINOR_VERSION="5"
+                    elif echo "$channel" | grep -qE "^stable-3\.x$|^fast-3\.x$" 2>/dev/null; then
+                        # stable-3.x / fast-3.x are rolling channels. As of this writing
+                        # they resolve to the 3.5.0 GA CSV on real clusters/catalogs
+                        # (verified against a live test cluster), so default rolling
+                        # channels to 3.5 rather than assuming 3.4.
+                        RHOAI_VERSION="3.5.x"
+                        RHOAI_MAJOR_VERSION="3"
+                        RHOAI_MINOR_VERSION="5"
+                    else
+                        # Covers explicit "3.4" channels and any other/unrecognized
+                        # channel string — default to 3.4.x since MaaS subscription
+                        # CRDs (checked above) only exist on 3.4+.
+                        RHOAI_VERSION="3.4.x"
+                        RHOAI_MAJOR_VERSION="3"
+                        RHOAI_MINOR_VERSION="4"
+                    fi
                 else
                     local channel=$(oc get subscription rhods-operator -n redhat-ods-operator -o jsonpath='{.spec.channel}' 2>/dev/null)
                     if echo "$channel" | grep -q "3.4" 2>/dev/null; then
@@ -111,6 +129,19 @@ get_rhoai_major_minor() {
 ################################################################################
 # Version Comparison Functions
 ################################################################################
+
+# Check if RHOAI version is 3.5 or higher
+# Returns: 0 if >= 3.5, 1 otherwise
+is_rhoai_35_or_higher() {
+    detect_rhoai_version
+
+    if [ "$RHOAI_MAJOR_VERSION" -gt 3 ]; then
+        return 0
+    elif [ "$RHOAI_MAJOR_VERSION" -eq 3 ] && [ "$RHOAI_MINOR_VERSION" -ge 5 ]; then
+        return 0
+    fi
+    return 1
+}
 
 # Check if RHOAI version is 3.4 or higher
 # Returns: 0 if >= 3.4, 1 otherwise
@@ -598,7 +629,7 @@ print_rhoai_info() {
         echo -e "    ${maas_label}:       $([ "$maas_state" = "Managed" ] && echo "${GREEN}$maas_state${NC}" || echo "${YELLOW}$maas_state${NC}")"
 
         if is_rhoai_34_or_higher && [ "$maas_state" = "Managed" ]; then
-            # 3.4-specific: check Tenant and CRD status
+            # 3.4+-specific: check Tenant and CRD status
             local tenant_ready=$(oc get tenant default-tenant -n models-as-a-service \
                 -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "N/A")
             echo -e "    MaaS Tenant:    $([ "$tenant_ready" = "True" ] && echo "${GREEN}Ready${NC}" || echo "${YELLOW}${tenant_ready}${NC}")"

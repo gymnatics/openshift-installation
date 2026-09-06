@@ -17,9 +17,8 @@ Step-by-step instructions for common tasks.
 
 | Guide | Description |
 |-------|-------------|
-| [RHOAI 3.4 Installation](guides/rhoai-3.4/RHOAI-34-INSTALLATION.md) | Full RHOAI 3.4 install guide (recommended) |
-| [RHOAI 3.4 Manual Installation](guides/rhoai-3.4/RHOAI-34-MANUAL-INSTALLATION-GUIDE.md) | Step-by-step with all YAMLs — Path A (no MaaS) and Path B (full MaaS) |
-| [RHOAI 3.4 What's New](guides/rhoai-3.4/RHOAI-34-WHATS-NEW.md) | Changes from 3.3 to 3.4 (MaaS GA, NeMo GA, AutoML/AutoRAG) |
+| [RHOAI 3.5 Installation](guides/rhoai-3.5/RHOAI-35-INSTALLATION.md) | Full RHOAI 3.5 install guide (recommended) |
+| [RHOAI 3.5 What's New](guides/rhoai-3.5/RHOAI-35-WHATS-NEW.md) | Changes from 3.4 to 3.5 (EvalHub GA, MaaS OIDC GA, llm-d flow control GA) |
 | [AWS Prerequisites](guides/AWS-PREREQUISITES-CHECK.md) | Pre-installation validation |
 | [Using Existing AWS Infrastructure](guides/USING-EXISTING-AWS-INFRASTRUCTURE.md) | Reuse VPCs and subnets |
 | [Configuration Reuse](guides/CONFIGURATION-REUSE.md) | Save and reuse install settings |
@@ -96,7 +95,7 @@ Step-by-step instructions for common tasks.
 
 ## Bugs & Known Issues
 
-Active bug reports for RHOAI 3.4:
+Active bug reports for RHOAI 3.4 (MaaS TLS/Authorino mechanisms are unchanged in 3.5, so these likely still apply):
 
 | Report | Description |
 |--------|-------------|
@@ -120,6 +119,16 @@ Technical reference documentation.
 | [OS Compatibility](reference/OS-COMPATIBILITY.md) | macOS/Linux compatibility layer (`os-compat.sh`) |
 
 ---
+
+## Archived — RHOAI 3.4
+
+Kept for reference if running a 3.4 cluster. See `docs/guides/rhoai-3.4/`.
+
+| Guide | Description |
+|-------|-------------|
+| [RHOAI 3.4 Installation](guides/rhoai-3.4/RHOAI-34-INSTALLATION.md) | Full RHOAI 3.4 install guide |
+| [RHOAI 3.4 What's New](guides/rhoai-3.4/RHOAI-34-WHATS-NEW.md) | Changes from 3.3 to 3.4 (MaaS GA, NeMo GA, AutoML/AutoRAG) |
+| [RHOAI 3.4 Manual Installation](guides/rhoai-3.4/RHOAI-34-MANUAL-INSTALLATION-GUIDE.md) | Step-by-step with all YAMLs — Path A (no MaaS) and Path B (full MaaS) |
 
 ## Archived — RHOAI 3.3
 
@@ -147,7 +156,7 @@ All troubleshooting is consolidated in [TROUBLESHOOTING.md](TROUBLESHOOTING.md),
 
 ## External Resources
 
-- [RHOAI 3.4 Documentation](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4)
+- [RHOAI 3.5 Documentation](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5)
 - [OpenShift Documentation](https://docs.openshift.com)
 - [Kueue Documentation](https://kueue.sigs.k8s.io/)
 - [KServe Documentation](https://kserve.github.io/website/)
@@ -155,6 +164,6 @@ All troubleshooting is consolidated in [TROUBLESHOOTING.md](TROUBLESHOOTING.md),
 
 ---
 
-**Last Updated**: July 2026
-**RHOAI Version**: 3.4
-**OpenShift Version**: 4.19+
+**Last Updated**: September 2026
+**RHOAI Version**: 3.5
+**OpenShift Version**: 4.19+ (4.19-4.20 per RHOAI 3.5 documented support matrix)

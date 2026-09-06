@@ -213,6 +213,21 @@ cat scripts/CLEANUP-USAGE.md
 
 ---
 
+### install-rhoai-35.sh
+**Purpose**: Full RHOAI 3.5 installation (recommended) — NFD, GPU, Kueue, cert-manager, RHCL, MaaS, llm-d, observability, dashboards
+
+**Usage**:
+```bash
+./scripts/install-rhoai-35.sh
+./scripts/install-rhoai-35.sh --channel stable-3.5
+./scripts/install-rhoai-35.sh --deploy-grafana --setup-users --num-users 10
+./scripts/install-rhoai-35.sh --enable-external-models --enable-tool-calling
+```
+
+**What it does**: Installs all prerequisites, RHOAI operator, MaaS with PostgreSQL, observability stack (COO + Perses + Observe tab dashboards), MLflow (auto-detects PostgreSQL), hardware profiles, and optional Grafana/users/pipelines. Adds two new 3.5 dashboard flags (`--enable-external-models`, `--enable-tool-calling`) on top of the 3.4 feature set.
+
+---
+
 ### install-rhoai-34.sh
 **Purpose**: Full RHOAI 3.4 installation — NFD, GPU, Kueue, cert-manager, RHCL, MaaS, llm-d, observability, dashboards
 
@@ -254,7 +269,7 @@ cat scripts/CLEANUP-USAGE.md
 ---
 
 ### deploy-demo-environment.sh
-**Purpose**: Deploy all 17 demo components on an existing RHOAI 3.4 cluster
+**Purpose**: Deploy all 17 demo components on an existing RHOAI 3.4+ cluster
 
 **Usage**:
 ```bash
@@ -269,8 +284,8 @@ cat scripts/CLEANUP-USAGE.md
 
 ### Fresh Installation (Recommended)
 ```bash
-# 1. Install RHOAI 3.4 (includes GPU, MaaS, observability)
-./scripts/install-rhoai-34.sh
+# 1. Install RHOAI 3.5 (includes GPU, MaaS, observability)
+./scripts/install-rhoai-35.sh
 
 # 2. Create GPU nodes (if not auto-scaled)
 ./scripts/create-gpu-machineset.sh
